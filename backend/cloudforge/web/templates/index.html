@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - CloudForge{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h2>Dashboard</h2>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Total Workflows</h3>
+            <p class="stat-value" id="total-workflows">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Active Workflows</h3>
+            <p class="stat-value" id="active-workflows">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Bugs Detected</h3>
+            <p class="stat-value" id="total-bugs">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Fixes Generated</h3>
+            <p class="stat-value" id="total-fixes">0</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Create New Workflow</h3>
+        <form id="create-workflow-form" class="form">
+            <div class="form-group">
+                <label for="repository-url">Repository URL:</label>
+                <input 
+                    type="text" 
+                    id="repository-url" 
+                    name="repository_url" 
+                    placeholder="https://github.com/username/repo"
+                    required
+                >
+            </div>
+            <button type="submit" class="btn btn-primary">Start Bug Detection</button>
+        </form>
+        <div id="create-workflow-message" class="message"></div>
+    </div>
+
+    <div class="section">
+        <h3>Recent Workflows</h3>
+        <div id="recent-workflows" class="workflows-list">
+            <p class="loading">Loading workflows...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Load dashboard stats
+async function loadDashboardStats() {
+    try {
+        const response = await fetch('/api/workflows');
+        const data = await response.json();
+        
+        document.getElementById('total-workflows').textContent = data.total;
+        
+        const activeCount = data.workflows.filter(w => w.status === 'in_progress').length;
+        document.getElementById('active-workflows').textContent = activeCount;
+        
+        // These would come from aggregated data in production
+        document.getElementById('total-bugs').textContent = '0';
+        document.getElementById('total-fixes').textContent = '0';
+        
+        displayRecentWorkflows(data.workflows.slice(0, 5));
+    } catch (error) {
+        console.error('Error loading dashboard stats:', error);
+    }
+}
+
+// Display recent workflows
+function displayRecentWorkflows(workflows) {
+    const container = document.getElementById('recent-workflows');
+    
+    if (workflows.length === 0) {
+        container.innerHTML = '<p class="empty">No workflows yet. Create one to get started!</p>';
+        return;
+    }
+    
+    container.innerHTML = workflows.map(workflow => `
+        <div class="workflow-card">
+            <div class="workflow-header">
+                <h4>${workflow.repository_url}</h4>
+                <span class="badge badge-${workflow.status}">${workflow.status}</span>
+            </div>
+            <div class="workflow-meta">
+                <span>ID: ${workflow.workflow_id}</span>
+                <span>Agent: ${workflow.current_agent}</span>
+            </div>
+            <div class="workflow-stats">
+                <span>🐛 ${workflow.bugs_found} bugs</span>
+                <span>🧪 ${workflow.tests_generated} tests</span>
+            </div>
+            <a href="/workflows/${workflow.workflow_id}" class="btn btn-small">View Details</a>
+        </div>
+    `).join('');
+}
+
+// Handle workflow creation
+document.getElementById('create-workflow-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('create-workflow-message');
+    const repositoryUrl = document.getElementById('repository-url').value;
+    
+    try {
+        const response = await fetch('/api/workflows', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ repository_url: repositoryUrl })
+        });
+        
+        if (response.ok) {
+            const workflow = await response.json();
+            messageDiv.className = 'message success';
+            messageDiv.textContent = `Workflow created successfully! ID: ${workflow.workflow_id}`;
+            document.getElementById('repository-url').value = '';
+            
+            // Reload stats
+            setTimeout(() => {
+                loadDashboardStats();
+                messageDiv.textContent = '';
+            }, 2000);
+        } else {
+            const error = await response.json();
+            messageDiv.className = 'message error';
+            messageDiv.textContent = `Error: ${error.error}`;
+        }
+    } catch (error) {
+        messageDiv.className = 'message error';
+        messageDiv.textContent = `Error: ${error.message}`;
+    }
+});
+
+// Load stats on page load
+loadDashboardStats();
+
+// Auto-refresh every 10 seconds
+setInterval(loadDashboardStats, 10000);
+</script>
+{% endblock %}

@@ -1,0 +1,27 @@
+# CloudForge Bug Intelligence - Python Dependencies
+
+# Core Framework
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+
+# Web Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# AWS SDK
+boto3>=1.34.0
+botocore>=1.34.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+hypothesis>=6.92.0
+
+# Code Quality
+ruff>=0.1.0
+black>=23.12.0
+mypy>=1.7.0
+
+# Utilities
+requests>=2.31.0

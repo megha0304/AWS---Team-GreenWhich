@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Workflow {{ workflow_id }} - CloudForge{% endblock %}
+
+{% block content %}
+<div class="workflow-detail">
+    <div class="breadcrumb">
+        <a href="/workflows">← Back to Workflows</a>
+    </div>
+    
+    <h2>Workflow Details</h2>
+    
+    <div id="workflow-info" class="section">
+        <p class="loading">Loading workflow information...</p>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="bugs">Bugs</button>
+        <button class="tab-btn" data-tab="tests">Tests</button>
+        <button class="tab-btn" data-tab="fixes">Fixes</button>
+    </div>
+
+    <div class="tab-content">
+        <div id="bugs-tab" class="tab-pane active">
+            <h3>Detected Bugs</h3>
+            <div id="bugs-list">
+                <p class="loading">Loading bugs...</p>
+            </div>
+        </div>
+
+        <div id="tests-tab" class="tab-pane">
+            <h3>Generated Tests</h3>
+            <div id="tests-list">
+                <p class="empty">Test results will appear here.</p>
+            </div>
+        </div>
+
+        <div id="fixes-tab" class="tab-pane">
+            <h3>Fix Suggestions</h3>
+            <div id="fixes-list">
+                <p class="loading">Loading fixes...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const workflowId = '{{ workflow_id }}';
+
+async function loadWorkflowInfo() {
+    try {
+        const response = await fetch(`/api/workflows/${workflowId}`);
+        if (!response.ok) {
+            throw new Error('Workflow not found');
+        }
+        
+        const workflow = await response.json();
+        displayWorkflowInfo(workflow);
+    } catch (error) {
+        document.getElementById('workflow-info').innerHTML = 
+            '<p class="error">Error loading workflow. Please check the ID and try again.</p>';
+    }
+}
+
+function displayWorkflowInfo(workflow) {
+    document.getElementById('workflow-info').innerHTML = `
+        <div class="info-grid">
+            <div class="info-item">
+                <label>Status:</label>
+                <span class="badge badge-${workflow.status}">${workflow.status}</span>
+            </div>
+            <div class="info-item">
+                <label>Repository:</label>
+                <span>${workflow.repository_url}</span>
+            </div>
+            <div class="info-item">
+                <label>Current Agent:</label>
+                <span>${workflow.current_agent}</span>
+            </div>
+            <div class="info-item">
+                <label>Created:</label>
+                <span>${new Date(workflow.created_at).toLocaleString()}</span>
+            </div>
+        </div>
+    `;
+}
+
+async function loadBugs() {
+    try {
+        const response = await fetch(`/api/workflows/${workflowId}/bugs`);
+        const data = await response.json();
+        displayBugs(data.bugs);
+    } catch (error) {
+        document.getElementById('bugs-list').innerHTML = 
+            '<p class="error">Error loading bugs.</p>';
+    }
+}
+
+function displayBugs(bugs) {
+    const container = document.getElementById('bugs-list');
+    
+    if (bugs.length === 0) {
+        container.innerHTML = '<p class="empty">No bugs detected yet.</p>';
+        return;
+    }
+    
+    container.innerHTML = bugs.map(bug => `
+        <div class="bug-card">
+            <div class="bug-header">
+                <span class="badge badge-${bug.severity}">${bug.severity}</span>
+                <span class="confidence">Confidence: ${(bug.confidence_score * 100).toFixed(0)}%</span>
+            </div>
+            <h4>${bug.description}</h4>
+            <p><strong>File:</strong> ${bug.file_path}:${bug.line_number}</p>
+            <pre class="code-snippet">${bug.code_snippet || 'No code snippet available'}</pre>
+        </div>
+    `).join('');
+}
+
+async function loadFixes() {
+    try {
+        const response = await fetch(`/api/workflows/${workflowId}/fixes`);
+        const data = await response.json();
+        displayFixes(data.fixes);
+    } catch (error) {
+        document.getElementById('fixes-list').innerHTML = 
+            '<p class="error">Error loading fixes.</p>';
+    }
+}
+
+function displayFixes(fixes) {
+    const container = document.getElementById('fixes-list');
+    
+    if (fixes.length === 0) {
+        container.innerHTML = '<p class="empty">No fixes generated yet.</p>';
+        return;
+    }
+    
+    container.innerHTML = fixes.map(fix => `
+        <div class="fix-card">
+            <h4>${fix.fix_description}</h4>
+            <p><strong>Safety Score:</strong> ${(fix.safety_score * 100).toFixed(0)}%</p>
+            <p><strong>Impact:</strong> ${fix.impact_assessment}</p>
+            <div class="code-diff">
+                <h5>Code Changes:</h5>
+                <pre>${fix.code_diff}</pre>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const tabName = btn.dataset.tab;
+        
+        // Update active tab button
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Update active tab pane
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+    });
+});
+
+// Load data
+loadWorkflowInfo();
+loadBugs();
+loadFixes();
+</script>
+{% endblock %}
