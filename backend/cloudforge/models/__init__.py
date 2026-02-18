@@ -2,7 +2,7 @@
 CloudForge Bug Intelligence data models.
 
 This package contains all Pydantic models used throughout the system,
-including agent state, bug reports, test cases, and analysis results.
+including agent state, bug reports, test cases, analysis results, and configuration.
 """
 
 from .state import (
@@ -13,6 +13,7 @@ from .state import (
     TestCase,
     TestResult,
 )
+from .config import SystemConfig
 
 __all__ = [
     "AgentState",
@@ -21,4 +22,5 @@ __all__ = [
     "TestResult",
     "RootCause",
     "FixSuggestion",
+    "SystemConfig",
 ]
