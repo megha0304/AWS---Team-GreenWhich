@@ -7,6 +7,10 @@ python-dotenv>=1.0.0
 # Web Framework
 flask>=3.0.0
 flask-cors>=4.0.0
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0  # For TestClient
+slowapi>=0.1.9  # For rate limiting
 
 # AWS SDK
 boto3>=1.34.0
@@ -25,3 +29,6 @@ mypy>=1.7.0
 
 # Utilities
 requests>=2.31.0
+
+# Orchestration
+langgraph>=1.0.0

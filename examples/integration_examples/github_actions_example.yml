@@ -1,0 +1,107 @@
+# GitHub Actions workflow for CloudForge Bug Intelligence
+# Place this file in .github/workflows/bug-detection.yml
+
+name: Bug Detection with CloudForge
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  bug-detection:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests
+      
+      - name: Run CloudForge Bug Detection
+        env:
+          CLOUDFORGE_API_KEY: ${{ secrets.CLOUDFORGE_API_KEY }}
+          CLOUDFORGE_API_URL: ${{ secrets.CLOUDFORGE_API_URL }}
+        run: |
+          python - <<'EOF'
+          import requests
+          import os
+          import time
+          import sys
+          
+          API_BASE = os.environ.get('CLOUDFORGE_API_URL', 'http://localhost:8000')
+          API_KEY = os.environ['CLOUDFORGE_API_KEY']
+          
+          headers = {
+              'X-API-Key': API_KEY,
+              'Content-Type': 'application/json'
+          }
+          
+          # Create workflow
+          response = requests.post(
+              f"{API_BASE}/workflows",
+              headers=headers,
+              json={
+                  "repository_url": os.environ['GITHUB_REPOSITORY'],
+                  "branch": os.environ.get('GITHUB_REF_NAME', 'main')
+              }
+          )
+          
+          if response.status_code != 201:
+              print(f"Failed to create workflow: {response.status_code}")
+              sys.exit(1)
+          
+          workflow_id = response.json()['workflow_id']
+          print(f"Workflow created: {workflow_id}")
+          
+          # Wait for completion
+          while True:
+              response = requests.get(
+                  f"{API_BASE}/workflows/{workflow_id}",
+                  headers=headers
+              )
+              
+              status = response.json()['status']
+              print(f"Status: {status}")
+              
+              if status == 'completed':
+                  break
+              elif status == 'failed':
+                  sys.exit(1)
+              
+              time.sleep(10)
+          
+          # Get bugs
+          response = requests.get(
+              f"{API_BASE}/workflows/{workflow_id}/bugs",
+              headers=headers
+          )
+          
+          bugs = response.json()
+          critical_bugs = [b for b in bugs if b['severity'] == 'critical']
+          
+          print(f"Found {len(bugs)} bugs ({len(critical_bugs)} critical)")
+          
+          # Fail if critical bugs found
+          if critical_bugs:
+              print("CRITICAL BUGS FOUND:")
+              for bug in critical_bugs:
+                  print(f"  - {bug['file_path']}:{bug['line_number']}: {bug['description']}")
+              sys.exit(1)
+          
+          EOF
+      
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: bug-detection-results
+          path: results_*.json

@@ -558,3 +558,28 @@ class SystemConfig(BaseSettings):
         if self.s3_endpoint_url:
             client_kwargs["endpoint_url"] = self.s3_endpoint_url
         return session.client("s3", **client_kwargs)
+    
+    @property
+    def workflows_table_name(self) -> str:
+        """Get workflows table name."""
+        return self.dynamodb_workflows_table
+    
+    @property
+    def bugs_table_name(self) -> str:
+        """Get bugs table name."""
+        return self.dynamodb_bugs_table
+    
+    @property
+    def artifacts_bucket_name(self) -> str:
+        """Get artifacts bucket name."""
+        return self.s3_artifacts_bucket
+    
+    @classmethod
+    def from_env(cls) -> "SystemConfig":
+        """
+        Create SystemConfig from environment variables.
+        
+        Returns:
+            SystemConfig instance
+        """
+        return cls.load_config()

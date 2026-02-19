@@ -1,4 +1,8 @@
-# AWS Bedrock Setup Guide
+# AWS Bedrock Setup Guide - Quick Reference
+
+**For complete AWS setup including hosting, see: `../AWS_COMPLETE_SETUP_GUIDE.md`**
+
+This is a quick reference for AWS Bedrock setup only.
 
 This guide explains how to configure AWS Bedrock for the CloudForge Bug Intelligence platform.
 
