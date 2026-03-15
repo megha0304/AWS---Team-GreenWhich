@@ -83,3 +83,6 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# Report (temporary, removed when project is finalized)
+report/
