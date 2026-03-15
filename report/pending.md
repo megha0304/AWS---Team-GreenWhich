@@ -1,57 +1,16 @@
 # CloudForge Bug Intelligence — What Needs to Be Completed (bedrock-integration branch)
 
-> Current branch: `bedrock-integration`, commit `e0c17cb`.
+> Current branch: `bedrock-integration`, latest commit `e5ea4ad`.
+> All 345 tests passing — 0 failures, 0 errors.
 
 ---
 
-## 🔴 High Priority — Fix Broken Tests
+## ✅ Recently Completed
 
-The Bedrock integration changed agent interfaces. 34 tests need updating:
+### Fix Broken Tests (was 🔴 High Priority) — DONE
 
-### test_analysis.py (6 failures)
-
-| Test | Issue |
-|------|-------|
-| `TestMockCauseGeneration` (3 tests) | Calls `_generate_mock_cause()` — method removed |
-| `TestConfidenceEstimation` (3 tests) | Calls `_estimate_mock_confidence()` — method removed |
-
-**Fix:** Remove these test classes or rewrite them to test `_analyze_failure()` with a mocked Bedrock response.
-
-### test_execution.py (2 failures)
-
-| Test | Issue |
-|------|-------|
-| `TestLambdaExecution::test_execute_on_lambda_placeholder` | Expects old placeholder behavior, now calls real `lambda_client.invoke()` |
-| `TestECSExecution::test_execute_on_ecs_placeholder` | Expects old placeholder behavior, now calls real `ecs_client.run_task()` |
-
-**Fix:** Mock `lambda_client.invoke()` and `ecs_client.run_task()` return values. The mock config also needs `environment` attribute.
-
-### test_resolution.py (2 failures)
-
-| Test | Issue |
-|------|-------|
-| `TestFixGeneration::test_generate_fix_description` | Expects old `_generate_fix_description()` method |
-| `TestFixGeneration::test_generate_code_diff_format` | Expects old `_generate_code_diff()` method |
-
-**Fix:** Update to test `_generate_fix()` with mocked Bedrock response, or test the static helper methods.
-
-### test_test_architect.py (1 failure + 21 errors)
-
-| Test | Issue |
-|------|-------|
-| `TestTestArchitectAgentInitialization` (1 fail) | Fixture creates agent with old constructor signature |
-| All other tests (21 errors) | Setup fixture fails — agent constructor changed |
-
-**Fix:** Update the `agent` fixture to pass `model_id` via config mock. The `q_developer_client` is now a bedrock-runtime client.
-
-### test_retry.py (2 failures)
-
-| Test | Issue |
-|------|-------|
-| `TestEdgeCases::test_zero_retries` | Edge case with 0 retries |
-| `TestRequirementValidation::test_configurable_base_delay` | Delay assertion mismatch |
-
-**Fix:** Check if retry behavior changed or if these are pre-existing issues.
+All 34 broken tests (7 failures + 21 errors + 6 from earlier) have been fixed.
+See `report/completed.md` § 8 for details.
 
 ---
 
@@ -97,7 +56,7 @@ The spec called for React + TypeScript. Flask was built instead. If React is req
 
 | Scope | Time |
 |-------|------|
-| Fix broken tests (high priority) | 2-3 hours |
+| ~~Fix broken tests~~ | ~~2-3 hours~~ ✅ Done |
 | Deploy AWS infrastructure | 1-2 hours |
 | Deploy hosting + shareable link | 30-60 min |
 | Integration tests | 2-3 hours |
