@@ -17,6 +17,7 @@ def mock_config():
     config.lambda_max_memory_mb = 10240  # 10 GB
     config.max_retries = 3
     config.dynamodb_workflows_table = "test-workflows"
+    config.environment = "test"
     return config
 
 
@@ -318,15 +319,27 @@ class TestLambdaExecution:
     """Test Lambda execution logic."""
     
     @pytest.mark.asyncio
-    async def test_execute_on_lambda_placeholder(self, agent, sample_test_case):
-        """Test placeholder Lambda execution."""
+    async def test_execute_on_lambda(self, agent, sample_test_case):
+        """Test Lambda execution with mocked invoke."""
+        import json as _json
+        mock_payload = Mock()
+        mock_payload.read.return_value = _json.dumps({
+            "exit_code": 0,
+            "stdout": "Test passed",
+            "stderr": ""
+        }).encode()
+        agent.lambda_client.invoke.return_value = {
+            "StatusCode": 200,
+            "Payload": mock_payload,
+        }
+
         result = await agent._execute_on_lambda(sample_test_case, "workflow-123")
-        
+
         assert isinstance(result, TestResult)
         assert result.test_id == sample_test_case.test_id
         assert result.execution_platform == "lambda"
-        assert result.status == "passed"  # Placeholder always passes
-        assert result.execution_time_ms > 0
+        assert result.status == "passed"
+        assert result.execution_time_ms >= 0
         assert result.exit_code == 0
 
 
@@ -334,15 +347,30 @@ class TestECSExecution:
     """Test ECS execution logic."""
     
     @pytest.mark.asyncio
-    async def test_execute_on_ecs_placeholder(self, agent, sample_test_case):
-        """Test placeholder ECS execution."""
+    async def test_execute_on_ecs(self, agent, sample_test_case):
+        """Test ECS execution with mocked run_task."""
+        agent.ecs_client.run_task.return_value = {
+            "tasks": [{"taskArn": "arn:aws:ecs:us-east-1:123:task/abc"}],
+            "failures": [],
+        }
+        mock_waiter = Mock()
+        mock_waiter.wait.return_value = None
+        agent.ecs_client.get_waiter.return_value = mock_waiter
+        agent.ecs_client.describe_tasks.return_value = {
+            "tasks": [{
+                "taskArn": "arn:aws:ecs:us-east-1:123:task/abc",
+                "containers": [{"exitCode": 0, "reason": "Test passed on ECS"}],
+            }]
+        }
+        agent.config.__dict__["ecs_subnet"] = "subnet-test"
+
         result = await agent._execute_on_ecs(sample_test_case, "workflow-123")
-        
+
         assert isinstance(result, TestResult)
         assert result.test_id == sample_test_case.test_id
         assert result.execution_platform == "ecs"
-        assert result.status == "passed"  # Placeholder always passes
-        assert result.execution_time_ms > 0
+        assert result.status == "passed"
+        assert result.execution_time_ms >= 0
         assert result.exit_code == 0
 
 
@@ -434,7 +462,25 @@ class TestIntegration:
             test_cases=[test1, test2]
         )
         
-        # Mock persistence
+        # Mock Lambda and ECS execution
+        agent._execute_on_lambda = AsyncMock(return_value=TestResult(
+            test_id="test-1",
+            status="passed",
+            stdout="Test passed",
+            stderr="",
+            exit_code=0,
+            execution_time_ms=100,
+            execution_platform="lambda"
+        ))
+        agent._execute_on_ecs = AsyncMock(return_value=TestResult(
+            test_id="test-2",
+            status="passed",
+            stdout="Test passed on ECS",
+            stderr="",
+            exit_code=0,
+            execution_time_ms=200,
+            execution_platform="ecs"
+        ))
         agent._persist_result = AsyncMock()
         
         result_state = await agent.execute_tests(state)

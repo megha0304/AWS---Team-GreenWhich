@@ -29,7 +29,9 @@ def resolution_config():
     return {
         "q_developer_endpoint": "https://q-developer.example.com",
         "max_fixes_per_bug": 3,
-        "timeout_seconds": 30
+        "timeout_seconds": 30,
+        "bedrock_model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
+        "max_retries": 3
     }
 
 
@@ -230,17 +232,18 @@ class TestFixGeneration:
     
     @pytest.mark.asyncio
     async def test_generate_fix_description(self, resolution_agent, sample_bug, sample_root_cause):
-        """Test fix description generation."""
-        description = resolution_agent._generate_fix_description(sample_root_cause, sample_bug)
+        """Test fallback diff generation."""
+        diff = ResolutionAgent._generate_fallback_diff(sample_bug)
         
-        assert sample_bug.severity in description
-        assert sample_bug.file_path in description
-        assert sample_root_cause.cause_description in description
+        assert "---" in diff
+        assert "+++" in diff
+        assert "@@" in diff
+        assert sample_bug.file_path in diff
     
     @pytest.mark.asyncio
     async def test_generate_code_diff_format(self, resolution_agent, sample_bug):
-        """Test that code diff is in unified diff format."""
-        diff = resolution_agent._generate_code_diff(sample_bug)
+        """Test that fallback code diff is in unified diff format."""
+        diff = ResolutionAgent._generate_fallback_diff(sample_bug)
         
         # Check unified diff format markers
         assert "---" in diff

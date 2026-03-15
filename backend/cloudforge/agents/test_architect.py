@@ -104,6 +104,17 @@ class TestArchitectAgent:
             if 'vitest' in content:
                 return "vitest"
 
+        if (repo / "pom.xml").exists():
+            content = (repo / "pom.xml").read_text(encoding='utf-8')
+            if 'junit' in content.lower():
+                return "junit"
+
+        if any(repo.rglob('*_test.go')):
+            return "go-test"
+
+        if (repo / "Cargo.toml").exists():
+            return "rust-test"
+
         if any(repo.rglob('*.py')):
             return "pytest"
         if any(repo.rglob('*.js')) or any(repo.rglob('*.ts')):
@@ -118,6 +129,9 @@ class TestArchitectAgent:
         req = repo / "requirements.txt"
         if req.exists():
             parts.append(f"\nPython Dependencies:\n{req.read_text(encoding='utf-8')[:500]}")
+        pkg = repo / "package.json"
+        if pkg.exists():
+            parts.append(f"\nJavaScript/TypeScript Project:\n{pkg.read_text(encoding='utf-8')[:500]}")
         return '\n'.join(parts)
 
     # ------------------------------------------------------------------
