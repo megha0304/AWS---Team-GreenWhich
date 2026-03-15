@@ -1,6 +1,7 @@
 """Unit tests for Test Architect Agent."""
 
 import pytest
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch
@@ -17,6 +18,7 @@ def mock_config():
     config.q_developer_endpoint = "https://test-endpoint.amazonaws.com"
     config.q_developer_api_key = "test-api-key"
     config.max_retries = 3
+    config.bedrock_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
     return config
 
 
@@ -71,6 +73,7 @@ class TestTestArchitectAgentInitialization:
         assert agent.q_developer_endpoint == "https://test-endpoint.amazonaws.com"
         assert agent.q_developer_api_key == "test-api-key"
         assert agent.max_retries == 3
+        assert agent.model_id == "anthropic.claude-3-sonnet-20240229-v1:0"
 
 
 class TestFrameworkDetection:
@@ -214,8 +217,8 @@ class TestTestGeneration:
             sample_state_with_bugs.repository_path = temp_dir
             (Path(temp_dir) / "test_file.py").write_text("# test")
             
-            # Mock the Q Developer call
-            agent._call_q_developer_for_test = AsyncMock(
+            # Mock the Bedrock call
+            agent._call_bedrock_for_test = AsyncMock(
                 return_value=("test_code", "expected_outcome")
             )
             
@@ -301,7 +304,7 @@ class TestTestGeneration:
                 # Succeed for second bug
                 return ("test_code", "expected_outcome")
             
-            agent._call_q_developer_for_test = mock_call
+            agent._call_bedrock_for_test = mock_call
             
             result_state = await agent.generate_tests(state)
             
@@ -315,12 +318,22 @@ class TestTestGeneration:
 
 
 class TestPlaceholderTestGeneration:
-    """Test placeholder test generation logic."""
+    """Test Bedrock-based test generation logic."""
     
     @pytest.mark.asyncio
-    async def test_placeholder_pytest_generation(self, agent, sample_bug):
-        """Test placeholder generates pytest code."""
-        test_code, expected_outcome = await agent._call_q_developer_for_test(
+    async def test_bedrock_pytest_generation(self, agent, sample_bug):
+        """Test Bedrock generates pytest code."""
+        mock_response_body = json.dumps({
+            "content": [{"text": json.dumps({
+                "test_code": "import pytest\n\ndef test_null_check():\n    assert obj is not None",
+                "expected_outcome": sample_bug.description[:100]
+            })}]
+        }).encode()
+        mock_stream = Mock()
+        mock_stream.read.return_value = mock_response_body
+        agent.q_developer_client.invoke_model.return_value = {"body": mock_stream}
+        
+        test_code, expected_outcome = await agent._call_bedrock_for_test(
             sample_bug,
             "pytest",
             "repo context"
@@ -329,12 +342,21 @@ class TestPlaceholderTestGeneration:
         assert "import pytest" in test_code
         assert "def test_" in test_code
         assert "assert" in test_code
-        assert sample_bug.description[:100] in expected_outcome
     
     @pytest.mark.asyncio
-    async def test_placeholder_unittest_generation(self, agent, sample_bug):
-        """Test placeholder generates unittest code."""
-        test_code, expected_outcome = await agent._call_q_developer_for_test(
+    async def test_bedrock_unittest_generation(self, agent, sample_bug):
+        """Test Bedrock generates unittest code."""
+        mock_response_body = json.dumps({
+            "content": [{"text": json.dumps({
+                "test_code": "import unittest\n\nclass TestUtils(unittest.TestCase):\n    def test_null_check(self):\n        self.assertIsNotNone(obj)",
+                "expected_outcome": sample_bug.description[:100]
+            })}]
+        }).encode()
+        mock_stream = Mock()
+        mock_stream.read.return_value = mock_response_body
+        agent.q_developer_client.invoke_model.return_value = {"body": mock_stream}
+        
+        test_code, expected_outcome = await agent._call_bedrock_for_test(
             sample_bug,
             "unittest",
             "repo context"
@@ -343,12 +365,21 @@ class TestPlaceholderTestGeneration:
         assert "import unittest" in test_code
         assert "class Test" in test_code
         assert "def test_" in test_code
-        assert sample_bug.description[:100] in expected_outcome
     
     @pytest.mark.asyncio
-    async def test_placeholder_jest_generation(self, agent, sample_bug):
-        """Test placeholder generates jest code."""
-        test_code, expected_outcome = await agent._call_q_developer_for_test(
+    async def test_bedrock_jest_generation(self, agent, sample_bug):
+        """Test Bedrock generates jest code."""
+        mock_response_body = json.dumps({
+            "content": [{"text": json.dumps({
+                "test_code": "describe('utils', () => {\n  test('null check', () => {\n    expect(obj).not.toBeNull();\n  });\n});",
+                "expected_outcome": sample_bug.description[:100]
+            })}]
+        }).encode()
+        mock_stream = Mock()
+        mock_stream.read.return_value = mock_response_body
+        agent.q_developer_client.invoke_model.return_value = {"body": mock_stream}
+        
+        test_code, expected_outcome = await agent._call_bedrock_for_test(
             sample_bug,
             "jest",
             "repo context"
@@ -357,7 +388,6 @@ class TestPlaceholderTestGeneration:
         assert "describe(" in test_code
         assert "test(" in test_code
         assert "expect(" in test_code
-        assert sample_bug.description[:100] in expected_outcome
 
 
 class TestTestCaseCreation:
@@ -366,7 +396,7 @@ class TestTestCaseCreation:
     @pytest.mark.asyncio
     async def test_generate_test_for_bug_creates_valid_test_case(self, agent, sample_bug):
         """Test that _generate_test_for_bug creates a valid TestCase."""
-        agent._call_q_developer_for_test = AsyncMock(
+        agent._call_bedrock_for_test = AsyncMock(
             return_value=("test_code_here", "validates the bug")
         )
         

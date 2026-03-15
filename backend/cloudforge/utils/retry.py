@@ -82,6 +82,9 @@ async def retry_with_backoff(
     """
     last_exception: Optional[Exception] = None
     
+    if max_retries == 0:
+        raise RetryExhaustedError(0, RuntimeError("max_retries is 0, no attempts made"))
+    
     for attempt in range(max_retries):
         try:
             # Attempt to call the function
@@ -204,6 +207,9 @@ def retry_with_backoff_sync(
     import time
     
     last_exception: Optional[Exception] = None
+    
+    if max_retries == 0:
+        raise RetryExhaustedError(0, RuntimeError("max_retries is 0, no attempts made"))
     
     for attempt in range(max_retries):
         try:

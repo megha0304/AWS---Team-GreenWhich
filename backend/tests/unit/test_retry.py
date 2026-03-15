@@ -540,12 +540,9 @@ class TestRequirementValidation:
     @pytest.mark.asyncio
     async def test_configurable_base_delay(self):
         """Test that base_delay is configurable as per task requirements."""
-        # Arrange
-        mock_func = AsyncMock(side_effect=[Exception("Error"), "success"])
-        
         # Act & Assert - Test with different base_delay values
         for base_delay in [1.5, 2.0, 3.0]:
-            mock_func.reset_mock()
+            mock_func = AsyncMock(side_effect=[Exception("Error"), "success"])
             with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
                 result = await retry_with_backoff(
                     mock_func,

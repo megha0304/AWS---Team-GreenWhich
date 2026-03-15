@@ -1,32 +1,16 @@
 """
 Execution Agent - Executes generated test cases on AWS compute infrastructure.
 
-This agent routes test execution to either AWS Lambda (for short tests) or AWS ECS
-(for long-running tests), captures test output, and persists results to DynamoDB.
-
-REQUIRED AWS SETUP:
-===================
-1. AWS Lambda:
-   - Lambda functions configured for test execution
-   - Appropriate timeout and memory settings
-   - IAM permissions: lambda:InvokeFunction
-
-2. AWS ECS:
-   - ECS cluster configured
-   - Task definitions for test execution
-   - IAM permissions: ecs:RunTask, ecs:DescribeTasks
-
-3. AWS DynamoDB:
-   - Table for storing test results
-   - IAM permissions: dynamodb:PutItem
+Routes tests to AWS Lambda (<15min, <10GB) or AWS ECS (larger tests).
+Captures output and persists results to DynamoDB.
 
 Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
 """
 
-import logging
 import json
+import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
 from uuid import uuid4
 
@@ -39,376 +23,240 @@ logger = logging.getLogger(__name__)
 
 class ExecutionAgent:
     """
-    Agent responsible for executing test cases on AWS compute infrastructure.
-    
-    Routes tests to AWS Lambda for short-running tests (<15min, <10GB) or AWS ECS
-    for long-running tests. Captures test output and persists results to DynamoDB.
-    
+    Executes test cases on AWS Lambda or ECS.
+
     Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
     """
-    
+
     def __init__(
         self,
         lambda_client: Any,
         ecs_client: Any,
         dynamodb_client: Any,
-        config: SystemConfig
+        config: SystemConfig,
     ):
-        """
-        Initialize Execution Agent.
-        
-        Args:
-            lambda_client: Boto3 Lambda client
-            ecs_client: Boto3 ECS client
-            dynamodb_client: Boto3 DynamoDB client
-            config: System configuration with execution settings
-        
-        Example:
-            >>> config = SystemConfig.load_config()
-            >>> lambda_client = boto3.client('lambda')
-            >>> ecs_client = boto3.client('ecs')
-            >>> dynamodb_client = boto3.client('dynamodb')
-            >>> agent = ExecutionAgent(lambda_client, ecs_client, dynamodb_client, config)
-        """
         self.lambda_client = lambda_client
         self.ecs_client = ecs_client
         self.dynamodb_client = dynamodb_client
         self.config = config
         self.logger = logging.getLogger(__name__)
-        
-        # Configuration
         self.lambda_max_runtime = config.lambda_max_runtime_seconds
         self.lambda_max_memory = config.lambda_max_memory_mb
         self.max_retries = config.max_retries
         self.dynamodb_table = config.dynamodb_workflows_table
-        
-        self.logger.info(
-            "Initialized ExecutionAgent",
-            extra={
-                "lambda_max_runtime": self.lambda_max_runtime,
-                "lambda_max_memory": self.lambda_max_memory,
-                "max_retries": self.max_retries
-            }
-        )
-    
+
     async def execute_tests(self, state: AgentState) -> AgentState:
-        """
-        Execute all test cases on appropriate compute platform.
-        
-        This is the main entry point for the Execution Agent. It routes each test
-        to the appropriate platform (Lambda or ECS) based on resource estimates.
-        
-        Args:
-            state: Current workflow state with test_cases list populated
-        
-        Returns:
-            Updated state with test_results list populated
-        
-        Raises:
-            ValueError: If test_cases list is empty
-            Exception: If test execution fails after retries
-        
-        Requirements: 3.1, 3.2, 3.3, 3.4, 3.5
-        """
+        """Execute all test cases. Main entry point."""
         self.logger.info(
             f"Starting test execution for workflow {state.workflow_id}",
-            extra={
-                "workflow_id": state.workflow_id,
-                "test_count": len(state.test_cases)
-            }
+            extra={"test_count": len(state.test_cases)},
         )
-        
-        # Validate state
+
         if not state.test_cases:
-            self.logger.warning(
-                f"No test cases found for workflow {state.workflow_id}, skipping execution",
-                extra={"workflow_id": state.workflow_id}
-            )
+            self.logger.warning("No test cases to execute")
             state.current_agent = "execution"
             return state
-        
-        # Execute each test case
+
         test_results = []
         for test_case in state.test_cases:
             try:
-                # Estimate resources needed
-                resource_estimate = self._estimate_resources(test_case)
-                
-                # Route to appropriate platform
-                if self._should_use_lambda(resource_estimate):
-                    self.logger.info(
-                        f"Routing test {test_case.test_id} to Lambda",
-                        extra={
-                            "workflow_id": state.workflow_id,
-                            "test_id": test_case.test_id,
-                            "estimated_runtime": resource_estimate["runtime_seconds"],
-                            "estimated_memory": resource_estimate["memory_mb"]
-                        }
-                    )
-                    test_result = await self._execute_on_lambda(test_case, state.workflow_id)
+                estimate = self._estimate_resources(test_case)
+                if self._should_use_lambda(estimate):
+                    result = await self._execute_on_lambda(test_case, state.workflow_id)
                 else:
-                    self.logger.info(
-                        f"Routing test {test_case.test_id} to ECS",
-                        extra={
-                            "workflow_id": state.workflow_id,
-                            "test_id": test_case.test_id,
-                            "estimated_runtime": resource_estimate["runtime_seconds"],
-                            "estimated_memory": resource_estimate["memory_mb"]
-                        }
-                    )
-                    test_result = await self._execute_on_ecs(test_case, state.workflow_id)
-                
-                test_results.append(test_result)
-                
-                # Persist result to DynamoDB (Requirement 3.5)
-                await self._persist_result(test_result, state.workflow_id)
-                
-                self.logger.info(
-                    f"Test execution complete for {test_case.test_id}",
-                    extra={
-                        "workflow_id": state.workflow_id,
-                        "test_id": test_case.test_id,
-                        "status": test_result.status,
-                        "platform": test_result.execution_platform
-                    }
-                )
-                
+                    result = await self._execute_on_ecs(test_case, state.workflow_id)
+                test_results.append(result)
+                await self._persist_result(result, state.workflow_id)
             except Exception as e:
-                self.logger.error(
-                    f"Failed to execute test {test_case.test_id}: {e}",
-                    extra={
-                        "workflow_id": state.workflow_id,
-                        "test_id": test_case.test_id,
-                        "error": str(e)
-                    }
-                )
-                # Add error to state but continue with other tests
-                state.add_error(
-                    error_type="test_execution_failed",
-                    error_message=f"Failed to execute test {test_case.test_id}: {e}",
-                    agent_name="execution"
-                )
+                self.logger.error(f"Failed to execute test {test_case.test_id}: {e}")
+                state.add_error("test_execution_failed", str(e), "execution")
                 continue
-        
-        # Update state with test_results
+
         state.test_results = test_results
         state.current_agent = "execution"
-        
-        self.logger.info(
-            f"Test execution complete: executed {len(test_results)} tests",
-            extra={
-                "workflow_id": state.workflow_id,
-                "tests_executed": len(test_results),
-                "tests_passed": sum(1 for r in test_results if r.status == "passed"),
-                "tests_failed": sum(1 for r in test_results if r.status == "failed")
-            }
-        )
-        
+        passed = sum(1 for r in test_results if r.status == "passed")
+        self.logger.info(f"Executed {len(test_results)} tests: {passed} passed")
         return state
-    
+
     def _estimate_resources(self, test_case: TestCase) -> Dict[str, int]:
-        """
-        Estimate memory and time requirements for a test.
-        
-        Uses heuristics based on test code complexity and framework to estimate
-        resource requirements.
-        
-        Args:
-            test_case: Test case to estimate resources for
-        
-        Returns:
-            Dictionary with estimated runtime_seconds and memory_mb
-        
-        Requirements: 3.1
-        """
-        # Simple heuristics for estimation
-        # In production, this could use ML models or historical data
-        
         code_lines = len(test_case.test_code.split('\n'))
-        
-        # Base estimates
-        base_runtime = 30  # seconds
-        base_memory = 512  # MB
-        
-        # Adjust based on code complexity
+        base_runtime, base_memory = 30, 512
         if code_lines > 100:
             base_runtime *= 2
-            base_memory *= 21  # Large tests need significantly more memory (exceeds Lambda limit)
+            base_memory *= 21
         elif code_lines > 50:
-            base_runtime *= 1.5
-            base_memory *= 1.5
-        
-        # Adjust based on test framework
-        if test_case.test_framework in ['pytest', 'unittest']:
-            # Python tests typically need more memory
+            base_runtime = int(base_runtime * 1.5)
+            base_memory = int(base_memory * 1.5)
+        if test_case.test_framework in ('pytest', 'unittest'):
             base_memory = max(base_memory, 1024)
-        elif test_case.test_framework in ['jest', 'mocha']:
-            # JavaScript tests are usually faster
-            base_runtime = max(base_runtime, 20)
-        
-        # Check for keywords that suggest longer runtime
-        if any(keyword in test_case.test_code.lower() for keyword in ['sleep', 'wait', 'timeout', 'long']):
+        if any(kw in test_case.test_code.lower() for kw in ('sleep', 'wait', 'timeout', 'long')):
             base_runtime *= 3
-        
-        return {
-            "runtime_seconds": base_runtime,
-            "memory_mb": base_memory
+        return {"runtime_seconds": base_runtime, "memory_mb": base_memory}
+
+    def _should_use_lambda(self, estimate: Dict[str, int]) -> bool:
+        return (
+            estimate["runtime_seconds"] < self.lambda_max_runtime
+            and estimate["memory_mb"] < self.lambda_max_memory
+        )
+
+    async def _execute_on_lambda(self, test_case: TestCase, workflow_id: str) -> TestResult:
+        """Execute test on AWS Lambda."""
+        start_time = time.time()
+
+        payload = {
+            "test_id": test_case.test_id,
+            "test_code": test_case.test_code,
+            "test_framework": test_case.test_framework,
+            "workflow_id": workflow_id,
         }
-    
-    def _should_use_lambda(self, resource_estimate: Dict[str, int]) -> bool:
-        """
-        Determine if test should run on Lambda based on resource estimates.
-        
-        Lambda is used for tests that:
-        - Estimated runtime < 15 minutes (900 seconds)
-        - Estimated memory < 10GB (10240 MB)
-        
-        Args:
-            resource_estimate: Dictionary with runtime_seconds and memory_mb
-        
-        Returns:
-            True if test should run on Lambda, False for ECS
-        
-        Requirements: 3.1, 3.2, 3.3
-        """
-        runtime_ok = resource_estimate["runtime_seconds"] < self.lambda_max_runtime
-        memory_ok = resource_estimate["memory_mb"] < self.lambda_max_memory
-        
-        return runtime_ok and memory_ok
-    
-    async def _execute_on_lambda(
-        self,
-        test_case: TestCase,
-        workflow_id: str
-    ) -> TestResult:
-        """
-        Execute test on AWS Lambda.
-        
-        ⚠️  USER ACTION REQUIRED ⚠️
-        ================================
-        This method contains placeholder logic. To use real AWS Lambda:
-        
-        1. Create Lambda function for test execution
-        2. Configure IAM permissions (lambda:InvokeFunction)
-        3. Uncomment the Lambda invocation code below
-        4. Remove or modify the placeholder return statement
-        
-        The placeholder currently returns mock test results.
-        
-        Args:
-            test_case: Test case to execute
-            workflow_id: Workflow ID for logging
-        
-        Returns:
-            Test result with captured output
-        
-        Requirements: 3.2, 3.4, 3.6
-        """
+
+        try:
+            response = self.lambda_client.invoke(
+                FunctionName=f"cloudforge-test-runner-{self.config.environment}",
+                InvocationType="RequestResponse",
+                Payload=json.dumps(payload),
+            )
+
+            response_payload = json.loads(response["Payload"].read())
+            status_code = response.get("StatusCode", 200)
+            func_error = response.get("FunctionError")
+
+            execution_time_ms = int((time.time() - start_time) * 1000)
+
+            if func_error:
+                return TestResult(
+                    test_id=test_case.test_id,
+                    status="error",
+                    stdout=json.dumps(response_payload.get("body", "")),
+                    stderr=response_payload.get("errorMessage", func_error),
+                    exit_code=1,
+                    execution_time_ms=execution_time_ms,
+                    execution_platform="lambda",
+                )
+
+            body = response_payload if isinstance(response_payload, dict) else {}
+            exit_code = body.get("exit_code", 0 if status_code == 200 else 1)
+            status = "passed" if exit_code == 0 else "failed"
+
+            return TestResult(
+                test_id=test_case.test_id,
+                status=status,
+                stdout=body.get("stdout", str(response_payload)),
+                stderr=body.get("stderr", ""),
+                exit_code=exit_code,
+                execution_time_ms=execution_time_ms,
+                execution_platform="lambda",
+            )
+
+        except Exception as e:
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            self.logger.error(f"Lambda execution failed for {test_case.test_id}: {e}")
+            return TestResult(
+                test_id=test_case.test_id,
+                status="error",
+                stdout="",
+                stderr=str(e),
+                exit_code=1,
+                execution_time_ms=execution_time_ms,
+                execution_platform="lambda",
+            )
+
+    async def _execute_on_ecs(self, test_case: TestCase, workflow_id: str) -> TestResult:
+        """Execute test on AWS ECS."""
         start_time = time.time()
-        time.sleep(0.001)  # Ensure measurable execution time
-        
-        # PLACEHOLDER: Mock response for testing
-        self.logger.warning(
-            f"Using placeholder test execution for {test_case.test_id}. "
-            "Configure AWS Lambda to use real execution."
-        )
-        
-        execution_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Simulate test execution
-        test_result = TestResult(
-            test_id=test_case.test_id,
-            status="passed",  # Mock: all tests pass
-            stdout=f"Test {test_case.test_id} executed successfully (placeholder)",
-            stderr="",
-            exit_code=0,
-            execution_time_ms=execution_time_ms,
-            execution_platform="lambda"
-        )
-        
-        return test_result
-    
-    async def _execute_on_ecs(
-        self,
-        test_case: TestCase,
-        workflow_id: str
-    ) -> TestResult:
-        """
-        Execute test on AWS ECS.
-        
-        ⚠️  USER ACTION REQUIRED ⚠️
-        ================================
-        This method contains placeholder logic. To use real AWS ECS:
-        
-        1. Create ECS cluster and task definition
-        2. Configure IAM permissions (ecs:RunTask, ecs:DescribeTasks)
-        3. Uncomment the ECS task execution code below
-        4. Remove or modify the placeholder return statement
-        
-        The placeholder currently returns mock test results.
-        
-        Args:
-            test_case: Test case to execute
-            workflow_id: Workflow ID for logging
-        
-        Returns:
-            Test result with captured output
-        
-        Requirements: 3.3, 3.4, 3.6
-        """
-        start_time = time.time()
-        time.sleep(0.001)  # Ensure measurable execution time
-        
-        # PLACEHOLDER: Mock response for testing
-        self.logger.warning(
-            f"Using placeholder test execution for {test_case.test_id}. "
-            "Configure AWS ECS to use real execution."
-        )
-        
-        execution_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Simulate test execution
-        test_result = TestResult(
-            test_id=test_case.test_id,
-            status="passed",  # Mock: all tests pass
-            stdout=f"Test {test_case.test_id} executed successfully on ECS (placeholder)",
-            stderr="",
-            exit_code=0,
-            execution_time_ms=execution_time_ms,
-            execution_platform="ecs"
-        )
-        
-        return test_result
-    
-    async def _persist_result(
-        self,
-        test_result: TestResult,
-        workflow_id: str
-    ) -> None:
-        """
-        Persist test result to DynamoDB.
-        
-        ⚠️  USER ACTION REQUIRED ⚠️
-        ================================
-        This method contains placeholder logic. To use real DynamoDB:
-        
-        1. Create DynamoDB table for test results
-        2. Configure IAM permissions (dynamodb:PutItem)
-        3. Uncomment the DynamoDB put_item code below
-        4. Remove or modify the placeholder logic
-        
-        Args:
-            test_result: Test result to persist
-            workflow_id: Workflow ID for partitioning
-        
-        Requirements: 3.5
-        """
-        # PLACEHOLDER: Mock persistence
-        self.logger.info(
-            f"Placeholder: Would persist test result {test_result.test_id} to DynamoDB",
-            extra={
-                "workflow_id": workflow_id,
-                "test_id": test_result.test_id,
-                "status": test_result.status
-            }
-        )
+
+        try:
+            run_response = self.ecs_client.run_task(
+                cluster=f"cloudforge-{self.config.environment}",
+                taskDefinition=f"cloudforge-test-runner-{self.config.environment}",
+                launchType="FARGATE",
+                overrides={
+                    "containerOverrides": [{
+                        "name": "test-runner",
+                        "environment": [
+                            {"name": "TEST_ID", "value": test_case.test_id},
+                            {"name": "TEST_CODE", "value": test_case.test_code[:10000]},
+                            {"name": "TEST_FRAMEWORK", "value": test_case.test_framework},
+                            {"name": "WORKFLOW_ID", "value": workflow_id},
+                        ],
+                    }],
+                },
+                networkConfiguration={
+                    "awsvpcConfiguration": {
+                        "subnets": [self.config.__dict__.get("ecs_subnet", "subnet-default")],
+                        "assignPublicIp": "ENABLED",
+                    }
+                },
+            )
+
+            tasks = run_response.get("tasks", [])
+            if not tasks:
+                failures = run_response.get("failures", [])
+                raise RuntimeError(f"ECS task failed to start: {failures}")
+
+            task_arn = tasks[0]["taskArn"]
+
+            # Wait for task completion
+            waiter = self.ecs_client.get_waiter("tasks_stopped")
+            waiter.wait(
+                cluster=f"cloudforge-{self.config.environment}",
+                tasks=[task_arn],
+                WaiterConfig={"Delay": 10, "MaxAttempts": 90},
+            )
+
+            # Get task result
+            desc = self.ecs_client.describe_tasks(
+                cluster=f"cloudforge-{self.config.environment}",
+                tasks=[task_arn],
+            )
+            task = desc["tasks"][0]
+            container = task["containers"][0]
+            exit_code = container.get("exitCode", 1)
+            status = "passed" if exit_code == 0 else "failed"
+            execution_time_ms = int((time.time() - start_time) * 1000)
+
+            return TestResult(
+                test_id=test_case.test_id,
+                status=status,
+                stdout=container.get("reason", "ECS task completed"),
+                stderr="",
+                exit_code=exit_code,
+                execution_time_ms=execution_time_ms,
+                execution_platform="ecs",
+            )
+
+        except Exception as e:
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            self.logger.error(f"ECS execution failed for {test_case.test_id}: {e}")
+            return TestResult(
+                test_id=test_case.test_id,
+                status="error",
+                stdout="",
+                stderr=str(e),
+                exit_code=1,
+                execution_time_ms=execution_time_ms,
+                execution_platform="ecs",
+            )
+
+    async def _persist_result(self, test_result: TestResult, workflow_id: str) -> None:
+        """Persist test result to DynamoDB."""
+        try:
+            self.dynamodb_client.put_item(
+                TableName=self.dynamodb_table,
+                Item={
+                    "PK": {"S": f"WORKFLOW#{workflow_id}"},
+                    "SK": {"S": f"TEST_RESULT#{test_result.test_id}"},
+                    "test_id": {"S": test_result.test_id},
+                    "status": {"S": test_result.status},
+                    "stdout": {"S": test_result.stdout[:10000]},
+                    "stderr": {"S": test_result.stderr[:10000]},
+                    "exit_code": {"N": str(test_result.exit_code)},
+                    "execution_time_ms": {"N": str(test_result.execution_time_ms)},
+                    "execution_platform": {"S": test_result.execution_platform},
+                    "timestamp": {"S": datetime.utcnow().isoformat()},
+                },
+            )
+            self.logger.info(f"Persisted result for test {test_result.test_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to persist result {test_result.test_id}: {e}")
+            # Don't raise - persistence failure shouldn't block the workflow
