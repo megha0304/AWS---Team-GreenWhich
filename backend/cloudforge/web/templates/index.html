@@ -43,6 +43,75 @@
         <div id="create-workflow-message" class="message"></div>
     </div>
 
+    <div class="charts-grid">
+        <div class="chart-section">
+            <h3>Test Results Overview</h3>
+            <div class="chart-container">
+                <canvas id="testsChart"></canvas>
+            </div>
+            <div class="chart-legend">
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #22c55e;"></span>
+                    <span>Passed</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #ef4444;"></span>
+                    <span>Failed</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #f59e0b;"></span>
+                    <span>Pending</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <h3>Bug Severity Distribution</h3>
+            <div class="chart-container">
+                <canvas id="bugSeverityChart"></canvas>
+            </div>
+            <div class="chart-legend">
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #dc2626;"></span>
+                    <span>Critical</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #ea580c;"></span>
+                    <span>High</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #f59e0b;"></span>
+                    <span>Medium</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #84cc16;"></span>
+                    <span>Low</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <h3>Workflow Status Distribution</h3>
+            <div class="chart-container">
+                <canvas id="workflowStatusChart"></canvas>
+            </div>
+            <div class="chart-legend">
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #3b82f6;"></span>
+                    <span>Completed</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #8b5cf6;"></span>
+                    <span>In Progress</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: #ec4899;"></span>
+                    <span>Pending</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="section">
         <h3>Recent Workflows</h3>
         <div id="recent-workflows" class="workflows-list">
@@ -54,6 +123,194 @@
 
 {% block extra_js %}
 <script>
+let testsChartInstance = null;
+let bugSeverityChartInstance = null;
+let workflowStatusChartInstance = null;
+
+// Colors for charts
+const chartColors = {
+    passed: '#22c55e',      // Green
+    failed: '#ef4444',      // Red
+    pending: '#f59e0b',     // Yellow
+    critical: '#dc2626',    // Dark red
+    high: '#ea580c',        // Orange-red
+    medium: '#f59e0b',      // Orange
+    low: '#84cc16',         // Lime
+    completed: '#3b82f6',   // Blue
+    inProgress: '#8b5cf6',  // Purple
+    pendingStatus: '#ec4899' // Pink
+};
+
+// Initialize charts
+function initializeCharts() {
+    initializeTestsChart();
+    initializeBugSeverityChart();
+    initializeWorkflowStatusChart();
+}
+
+// Initialize tests pie chart
+function initializeTestsChart() {
+    const ctx = document.getElementById('testsChart');
+    if (!ctx) return;
+
+    if (testsChartInstance) {
+        testsChartInstance.destroy();
+    }
+
+    testsChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Passed Tests', 'Failed Tests', 'Pending Tests'],
+            datasets: [{
+                data: [42, 8, 15],
+                backgroundColor: [
+                    chartColors.passed,
+                    chartColors.failed,
+                    chartColors.pending
+                ],
+                borderColor: '#0d0d0d',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleColor: '#00ff88',
+                    bodyColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: '#00ff88',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Initialize bug severity pie chart
+function initializeBugSeverityChart() {
+    const ctx = document.getElementById('bugSeverityChart');
+    if (!ctx) return;
+
+    if (bugSeverityChartInstance) {
+        bugSeverityChartInstance.destroy();
+    }
+
+    bugSeverityChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{
+                data: [12, 18, 24, 8],
+                backgroundColor: [
+                    chartColors.critical,
+                    chartColors.high,
+                    chartColors.medium,
+                    chartColors.low
+                ],
+                borderColor: '#0d0d0d',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleColor: '#00ff88',
+                    bodyColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: '#00ff88',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} bugs (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Initialize workflow status pie chart
+function initializeWorkflowStatusChart() {
+    const ctx = document.getElementById('workflowStatusChart');
+    if (!ctx) return;
+
+    if (workflowStatusChartInstance) {
+        workflowStatusChartInstance.destroy();
+    }
+
+    workflowStatusChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Completed', 'In Progress', 'Pending'],
+            datasets: [{
+                data: [35, 12, 8],
+                backgroundColor: [
+                    chartColors.completed,
+                    chartColors.inProgress,
+                    chartColors.pendingStatus
+                ],
+                borderColor: '#0d0d0d',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleColor: '#00ff88',
+                    bodyColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: '#00ff88',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 // Load dashboard stats
 async function loadDashboardStats() {
     try {
@@ -143,6 +400,7 @@ document.getElementById('create-workflow-form').addEventListener('submit', async
 
 // Load stats on page load
 loadDashboardStats();
+initializeCharts();
 
 // Auto-refresh every 10 seconds
 setInterval(loadDashboardStats, 10000);

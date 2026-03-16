@@ -18,6 +18,7 @@
         <button class="tab-btn active" data-tab="bugs">Bugs</button>
         <button class="tab-btn" data-tab="tests">Tests</button>
         <button class="tab-btn" data-tab="fixes">Fixes</button>
+        <button class="tab-btn" data-tab="charts">Charts</button>
     </div>
 
     <div class="tab-content">
@@ -41,6 +42,46 @@
                 <p class="loading">Loading fixes...</p>
             </div>
         </div>
+
+        <div id="charts-tab" class="tab-pane">
+            <h3>Workflow Analytics</h3>
+            <div class="charts-grid">
+                <div class="chart-section">
+                    <h4>Test Results</h4>
+                    <div class="chart-container">
+                        <canvas id="workflowTestsChart"></canvas>
+                    </div>
+                    <div class="chart-stats">
+                        <div class="stat-mini">
+                            <span class="stat-label">Passed</span>
+                            <span class="stat-value" id="test-passed" style="color: #22c55e;">0</span>
+                        </div>
+                        <div class="stat-mini">
+                            <span class="stat-label">Failed</span>
+                            <span class="stat-value" id="test-failed" style="color: #ef4444;">0</span>
+                        </div>
+                        <div class="stat-mini">
+                            <span class="stat-label">Pending</span>
+                            <span class="stat-value" id="test-pending" style="color: #f59e0b;">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <h4>Bug Severity</h4>
+                    <div class="chart-container">
+                        <canvas id="workflowBugSeverityChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <h4>Agent Progress</h4>
+                    <div class="chart-container">
+                        <canvas id="workflowAgentChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -48,6 +89,171 @@
 {% block extra_js %}
 <script>
 const workflowId = '{{ workflow_id }}';
+let testsChartInstance = null;
+let bugSeverityChartInstance = null;
+let agentChartInstance = null;
+
+// Chart colors
+const chartColors = {
+    passed: '#22c55e',
+    failed: '#ef4444',
+    pending: '#f59e0b',
+    critical: '#dc2626',
+    high: '#ea580c',
+    medium: '#f59e0b',
+    low: '#84cc16'
+};
+
+// Initialize tests pie chart
+function initializeTestsChart() {
+    const ctx = document.getElementById('workflowTestsChart');
+    if (!ctx) return;
+
+    if (testsChartInstance) {
+        testsChartInstance.destroy();
+    }
+
+    // Sample data - would come from API
+    const passed = 42;
+    const failed = 8;
+    const pending = 15;
+
+    document.getElementById('test-passed').textContent = passed;
+    document.getElementById('test-failed').textContent = failed;
+    document.getElementById('test-pending').textContent = pending;
+
+    testsChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Passed', 'Failed', 'Pending'],
+            datasets: [{
+                data: [passed, failed, pending],
+                backgroundColor: [
+                    chartColors.passed,
+                    chartColors.failed,
+                    chartColors.pending
+                ],
+                borderColor: '#0d0d0d',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleColor: '#00ff88',
+                    bodyColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: '#00ff88',
+                    borderWidth: 1,
+                    padding: 12
+                }
+            }
+        }
+    });
+}
+
+// Initialize bug severity chart
+function initializeBugSeverityChart() {
+    const ctx = document.getElementById('workflowBugSeverityChart');
+    if (!ctx) return;
+
+    if (bugSeverityChartInstance) {
+        bugSeverityChartInstance.destroy();
+    }
+
+    bugSeverityChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{
+                data: [3, 5, 8, 2],
+                backgroundColor: [
+                    chartColors.critical,
+                    chartColors.high,
+                    chartColors.medium,
+                    chartColors.low
+                ],
+                borderColor: '#0d0d0d',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleColor: '#00ff88',
+                    bodyColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: '#00ff88',
+                    borderWidth: 1,
+                    padding: 12
+                }
+            }
+        }
+    });
+}
+
+// Initialize agent progress chart
+function initializeAgentChart() {
+    const ctx = document.getElementById('workflowAgentChart');
+    if (!ctx) return;
+
+    if (agentChartInstance) {
+        agentChartInstance.destroy();
+    }
+
+    agentChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Bug Detective', 'Test Architect', 'Resolution', 'Execution'],
+            datasets: [{
+                data: [100, 85, 60, 45],
+                backgroundColor: [
+                    '#3b82f6',
+                    '#8b5cf6',
+                    '#ec4899',
+                    '#f59e0b'
+                ],
+                borderColor: '#0d0d0d',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleColor: '#00ff88',
+                    bodyColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: '#00ff88',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.parsed + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
 
 async function loadWorkflowInfo() {
     try {
@@ -163,6 +369,15 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         // Update active tab pane
         document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
         document.getElementById(`${tabName}-tab`).classList.add('active');
+
+        // Initialize charts when charts tab is activated
+        if (tabName === 'charts') {
+            setTimeout(() => {
+                initializeTestsChart();
+                initializeBugSeverityChart();
+                initializeAgentChart();
+            }, 100);
+        }
     });
 });
 
