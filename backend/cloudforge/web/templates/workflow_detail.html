@@ -23,7 +23,10 @@
 
     <div class="tab-content">
         <div id="bugs-tab" class="tab-pane active">
-            <h3>Detected Bugs</h3>
+            <div class="bugs-tab-header">
+                <h3>Detected Bugs</h3>
+                <span id="bugs-count-badge" class="bugs-count-badge" style="display:none;"></span>
+            </div>
             <div id="bugs-list">
                 <p class="loading">Loading bugs...</p>
             </div>
@@ -306,11 +309,40 @@ async function loadBugs() {
 
 function displayBugs(bugs) {
     const container = document.getElementById('bugs-list');
-    
+    const badge = document.getElementById('bugs-count-badge');
+
     if (bugs.length === 0) {
-        container.innerHTML = '<p class="empty">No bugs detected yet.</p>';
+        badge.style.display = 'none';
+
+        // Show toast prompt
+        const toast = document.createElement('div');
+        toast.className = 'no-bugs-toast';
+        toast.innerHTML = '✅ &nbsp;Scan complete — <strong>No bugs found!</strong>';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.classList.add('show'), 100);
+        setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 400); }, 4000);
+
+        container.innerHTML = `
+            <div class="no-bugs-state">
+                <svg class="no-bugs-shield" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M32 4L8 14v18c0 13 10.5 24.5 24 28 13.5-3.5 24-15 24-28V14L32 4z" fill="#0d1f14" stroke="#00ff88" stroke-width="2"/>
+                    <polyline points="20,32 28,40 44,24" stroke="#00ff88" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <h3>No Bugs Found</h3>
+                <p>The scan completed successfully. <strong>0 issues</strong> were detected in your code.</p>
+                <div class="no-bugs-pills">
+                    <span class="no-bugs-pill">✔ Critical &nbsp;0</span>
+                    <span class="no-bugs-pill">✔ High &nbsp;0</span>
+                    <span class="no-bugs-pill">✔ Medium &nbsp;0</span>
+                    <span class="no-bugs-pill">✔ Low &nbsp;0</span>
+                </div>
+            </div>
+        `;
         return;
     }
+
+    badge.textContent = bugs.length + ' issue' + (bugs.length > 1 ? 's' : '');
+    badge.style.display = 'inline-block';
     
     container.innerHTML = bugs.map(bug => `
         <div class="bug-card">

@@ -25,8 +25,14 @@ workflows: Dict[str, Any] = {}
 
 
 @app.route('/')
+def home():
+    """Render the home/landing page."""
+    return render_template('home.html')
+
+
+@app.route('/dashboard')
 def index():
-    """Render the main dashboard page."""
+    """Render the dashboard page."""
     return render_template('index.html')
 
 

@@ -12,10 +12,11 @@
 <body>
     <header class="header">
         <div class="container">
-            <h1 class="logo">🔧 CloudForge Bug Intelligence</h1>
+            <h1 class="logo">🐛 CloudForge Bug Intelligence</h1>
             <nav class="nav">
-                <a href="/" class="nav-link">Dashboard</a>
-                <a href="/workflows" class="nav-link">Workflows</a>
+                <a href="/" class="nav-link {% if request.path == '/' %}nav-link-active{% endif %}">Home</a>
+                <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}nav-link-active{% endif %}">Dashboard</a>
+                <a href="/workflows" class="nav-link {% if request.path == '/workflows' %}nav-link-active{% endif %}">Workflows</a>
             </nav>
         </div>
     </header>

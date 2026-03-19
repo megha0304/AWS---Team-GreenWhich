@@ -73,7 +73,7 @@ function displayWorkflows(workflows) {
                 <p><strong>Current Agent:</strong> ${workflow.current_agent}</p>
                 <p><strong>Created:</strong> ${new Date(workflow.created_at).toLocaleString()}</p>
                 <div class="workflow-stats">
-                    <span>🐛 ${workflow.bugs_found} bugs</span>
+                    <span>${workflow.bugs_found === 0 ? '<span class="badge badge-clean">✅ Clean</span>' : '🐛 ' + workflow.bugs_found + ' bugs'}</span>
                     <span>🧪 ${workflow.tests_generated} tests</span>
                 </div>
             </div>
