@@ -1016,3 +1016,87 @@ body {
     font-size: 1rem;
     padding: 0.8rem 2rem;
 }
+
+/* Test Cards */
+.test-card {
+    background: #141414;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border-left: 4px solid #3b82f6;
+}
+
+.test-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.test-name {
+    color: #00ff88;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+}
+
+.test-meta {
+    color: #00cc6a;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.badge-passed  { background: #14532d; color: #22c55e; border: 1px solid #22c55e; }
+.badge-failed  { background: #450a0a; color: #ef4444; border: 1px solid #ef4444; }
+.badge-pending { background: #451a03; color: #f59e0b; border: 1px solid #f59e0b; }
+
+/* Written Labels (Bug Severity & Agent Progress) */
+.written-labels {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.written-label-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+}
+
+.wl-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.wl-name {
+    width: 110px;
+    color: #00ff88;
+    flex-shrink: 0;
+}
+
+.wl-bar {
+    flex: 1;
+    background: #1a1a1a;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    border: 1px solid #1f3d2e;
+}
+
+.wl-fill {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+
+.wl-count {
+    width: 140px;
+    text-align: right;
+    color: #00cc6a;
+    flex-shrink: 0;
+}

@@ -33,9 +33,12 @@
         </div>
 
         <div id="tests-tab" class="tab-pane">
-            <h3>Generated Tests</h3>
+            <div class="bugs-tab-header">
+                <h3>Generated Tests</h3>
+                <span id="tests-count-badge" class="bugs-count-badge" style="display:none;"></span>
+            </div>
             <div id="tests-list">
-                <p class="empty">Test results will appear here.</p>
+                <p class="loading">Loading tests...</p>
             </div>
         </div>
 
@@ -75,6 +78,7 @@
                     <div class="chart-container">
                         <canvas id="workflowBugSeverityChart"></canvas>
                     </div>
+                    <div id="severity-labels" class="written-labels"></div>
                 </div>
 
                 <div class="chart-section">
@@ -82,6 +86,7 @@
                     <div class="chart-container">
                         <canvas id="workflowAgentChart"></canvas>
                     </div>
+                    <div id="agent-labels" class="written-labels"></div>
                 </div>
             </div>
         </div>
@@ -161,101 +166,91 @@ function initializeTestsChart() {
     });
 }
 
-// Initialize bug severity chart
-function initializeBugSeverityChart() {
+// Initialize bug severity chart with real data
+function initializeBugSeverityChart(bugs) {
     const ctx = document.getElementById('workflowBugSeverityChart');
     if (!ctx) return;
+    if (bugSeverityChartInstance) bugSeverityChartInstance.destroy();
 
-    if (bugSeverityChartInstance) {
-        bugSeverityChartInstance.destroy();
-    }
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+    (bugs || []).forEach(b => { if (counts[b.severity] !== undefined) counts[b.severity]++; });
+
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
 
     bugSeverityChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['Critical', 'High', 'Medium', 'Low'],
             datasets: [{
-                data: [3, 5, 8, 2],
-                backgroundColor: [
-                    chartColors.critical,
-                    chartColors.high,
-                    chartColors.medium,
-                    chartColors.low
-                ],
-                borderColor: '#0d0d0d',
-                borderWidth: 2,
-                hoverOffset: 10
+                data: [counts.critical, counts.high, counts.medium, counts.low],
+                backgroundColor: [chartColors.critical, chartColors.high, chartColors.medium, chartColors.low],
+                borderColor: '#0d0d0d', borderWidth: 2, hoverOffset: 10
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    titleColor: '#00ff88',
-                    bodyColor: '#00ff88',
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    borderColor: '#00ff88',
-                    borderWidth: 1,
-                    padding: 12
-                }
-            }
+            responsive: true, maintainAspectRatio: true,
+            plugins: { legend: { display: false }, tooltip: { titleColor: '#00ff88', bodyColor: '#00ff88', backgroundColor: 'rgba(0,0,0,0.8)', borderColor: '#00ff88', borderWidth: 1 } }
         }
     });
+
+    document.getElementById('severity-labels').innerHTML = [
+        { label: 'Critical', count: counts.critical, color: chartColors.critical },
+        { label: 'High',     count: counts.high,     color: chartColors.high },
+        { label: 'Medium',   count: counts.medium,   color: chartColors.medium },
+        { label: 'Low',      count: counts.low,      color: chartColors.low },
+    ].map(item => `
+        <div class="written-label-row">
+            <span class="wl-dot" style="background:${item.color}"></span>
+            <span class="wl-name">${item.label}</span>
+            <span class="wl-bar"><span class="wl-fill" style="width:${Math.round(item.count/total*100)}%;background:${item.color}"></span></span>
+            <span class="wl-count">${item.count} bug${item.count !== 1 ? 's' : ''} (${Math.round(item.count/total*100)}%)</span>
+        </div>
+    `).join('');
 }
 
-// Initialize agent progress chart
-function initializeAgentChart() {
+// Initialize agent progress chart with written labels
+function initializeAgentChart(bugs) {
     const ctx = document.getElementById('workflowAgentChart');
     if (!ctx) return;
+    if (agentChartInstance) agentChartInstance.destroy();
 
-    if (agentChartInstance) {
-        agentChartInstance.destroy();
-    }
+    const agents = [
+        { label: 'Bug Detective',  pct: 100, color: '#3b82f6', desc: 'Scan complete' },
+        { label: 'Test Architect', pct: 100, color: '#8b5cf6', desc: 'Tests generated' },
+        { label: 'Execution',      pct: 100, color: '#f59e0b', desc: 'Tests executed' },
+        { label: 'Analysis',       pct: 100, color: '#ec4899', desc: 'Root cause done' },
+        { label: 'Resolution',     pct: 100, color: '#00ff88', desc: 'Fixes ready' },
+    ];
 
     agentChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Bug Detective', 'Test Architect', 'Resolution', 'Execution'],
+            labels: agents.map(a => a.label),
             datasets: [{
-                data: [100, 85, 60, 45],
-                backgroundColor: [
-                    '#3b82f6',
-                    '#8b5cf6',
-                    '#ec4899',
-                    '#f59e0b'
-                ],
-                borderColor: '#0d0d0d',
-                borderWidth: 2,
-                hoverOffset: 10
+                data: agents.map(a => a.pct),
+                backgroundColor: agents.map(a => a.color),
+                borderColor: '#0d0d0d', borderWidth: 2, hoverOffset: 10
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: true,
+            responsive: true, maintainAspectRatio: true,
             plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    titleColor: '#00ff88',
-                    bodyColor: '#00ff88',
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    borderColor: '#00ff88',
-                    borderWidth: 1,
-                    padding: 12,
-                    callbacks: {
-                        label: function(context) {
-                            return context.label + ': ' + context.parsed + '%';
-                        }
-                    }
+                legend: { display: false },
+                tooltip: { titleColor: '#00ff88', bodyColor: '#00ff88', backgroundColor: 'rgba(0,0,0,0.8)', borderColor: '#00ff88', borderWidth: 1,
+                    callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + '%' }
                 }
             }
         }
     });
+
+    document.getElementById('agent-labels').innerHTML = agents.map(a => `
+        <div class="written-label-row">
+            <span class="wl-dot" style="background:${a.color}"></span>
+            <span class="wl-name">${a.label}</span>
+            <span class="wl-bar"><span class="wl-fill" style="width:${a.pct}%;background:${a.color}"></span></span>
+            <span class="wl-count">${a.desc} ✔</span>
+        </div>
+    `).join('');
 }
 
 async function loadWorkflowInfo() {
@@ -343,6 +338,7 @@ function displayBugs(bugs) {
 
     badge.textContent = bugs.length + ' issue' + (bugs.length > 1 ? 's' : '');
     badge.style.display = 'inline-block';
+    window._bugs = bugs;
     
     container.innerHTML = bugs.map(bug => `
         <div class="bug-card">
@@ -353,6 +349,42 @@ function displayBugs(bugs) {
             <h4>${bug.description}</h4>
             <p><strong>File:</strong> ${bug.file_path}:${bug.line_number}</p>
             <pre class="code-snippet">${bug.code_snippet || 'No code snippet available'}</pre>
+        </div>
+    `).join('');
+}
+
+async function loadTests() {
+    try {
+        const response = await fetch(`/api/workflows/${workflowId}/tests`);
+        const data = await response.json();
+        displayTests(data.tests);
+    } catch (error) {
+        document.getElementById('tests-list').innerHTML =
+            '<p class="error">Error loading tests.</p>';
+    }
+}
+
+function displayTests(tests) {
+    const container = document.getElementById('tests-list');
+    const badge = document.getElementById('tests-count-badge');
+
+    if (!tests || tests.length === 0) {
+        badge.style.display = 'none';
+        container.innerHTML = '<p class="empty">No tests generated yet.</p>';
+        return;
+    }
+
+    badge.textContent = tests.length + ' test' + (tests.length > 1 ? 's' : '');
+    badge.style.display = 'inline-block';
+
+    container.innerHTML = tests.map(test => `
+        <div class="test-card">
+            <div class="test-header">
+                <span class="test-name">${test.test_name}</span>
+                <span class="badge badge-${test.status}">${test.status}</span>
+            </div>
+            <p class="test-meta"><strong>File:</strong> ${test.file_path}:${test.line_number} &nbsp;|&nbsp; <strong>Severity:</strong> ${test.severity}</p>
+            <pre class="code-snippet">${test.test_code}</pre>
         </div>
     `).join('');
 }
@@ -406,8 +438,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (tabName === 'charts') {
             setTimeout(() => {
                 initializeTestsChart();
-                initializeBugSeverityChart();
-                initializeAgentChart();
+                initializeBugSeverityChart(window._bugs || []);
+                initializeAgentChart(window._bugs || []);
             }, 100);
         }
     });
@@ -416,6 +448,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // Load data
 loadWorkflowInfo();
 loadBugs();
+loadTests();
 loadFixes();
 </script>
 {% endblock %}
