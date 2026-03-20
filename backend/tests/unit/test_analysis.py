@@ -133,106 +133,42 @@ class TestBugFinding:
         assert bug is None
 
 
-class TestMockCauseGeneration:
-    """Test mock cause generation logic."""
-    
-    def test_generate_mock_cause_null_pointer(self, agent, sample_test_result):
-        """Test mock cause generation for null pointer bugs."""
-        bug = BugReport(
-            bug_id="bug-1",
-            file_path="test.py",
-            line_number=10,
-            severity="high",
-            description="Null pointer dereference detected",
-            code_snippet="x = obj.value",
-            confidence_score=0.9
-        )
-        
-        cause = agent._generate_mock_cause(bug, sample_test_result)
-        
-        assert "Null pointer" in cause or "None value" in cause
-        assert "test.py" in cause
-        assert "10" in cause
-    
-    def test_generate_mock_cause_index_error(self, agent, sample_test_result):
-        """Test mock cause generation for index errors."""
-        bug = BugReport(
-            bug_id="bug-2",
-            file_path="test.py",
-            line_number=20,
-            severity="medium",
-            description="Array index out of bounds",
-            code_snippet="item = arr[10]",
-            confidence_score=0.8
-        )
-        
-        cause = agent._generate_mock_cause(bug, sample_test_result)
-        
-        assert "index" in cause.lower() or "array" in cause.lower()
-        assert "test.py" in cause
-    
-    def test_generate_mock_cause_type_error(self, agent, sample_test_result):
-        """Test mock cause generation for type errors."""
-        bug = BugReport(
-            bug_id="bug-3",
-            file_path="test.py",
-            line_number=30,
-            severity="low",
-            description="Type mismatch in function call",
-            code_snippet="result = func('string')",
-            confidence_score=0.7
-        )
-        
-        cause = agent._generate_mock_cause(bug, sample_test_result)
-        
-        assert "type" in cause.lower()
-        assert "test.py" in cause
+class TestBedrockAnalysis:
+    """Test Bedrock-based analysis (with mocked invoke_model)."""
 
+    @pytest.mark.asyncio
+    async def test_analyze_failure_returns_root_cause(self, agent, sample_bug, sample_test_result):
+        """Test that _analyze_failure returns a valid RootCause via Bedrock."""
+        # Mock the bedrock invoke_model response
+        mock_response_body = json.dumps({
+            "content": [{"text": json.dumps({
+                "cause_description": "Null pointer dereference due to missing None check",
+                "confidence_score": 0.85,
+                "causal_chain": "obj is None -> accessing .value raises AttributeError"
+            })}]
+        }).encode()
 
-class TestConfidenceEstimation:
-    """Test confidence score estimation."""
-    
-    def test_estimate_confidence_base(self, agent, sample_bug, sample_test_result):
-        """Test base confidence estimation."""
-        confidence = agent._estimate_mock_confidence(sample_bug, sample_test_result)
-        
-        assert 0.0 <= confidence <= 1.0
-        # Should be close to bug confidence
-        assert abs(confidence - sample_bug.confidence_score) < 0.2
-    
-    def test_estimate_confidence_with_clear_error(self, agent, sample_bug):
-        """Test confidence boost with clear error message."""
-        test_result = TestResult(
-            test_id="test-1",
-            status="failed",
-            stdout="",
-            stderr="Very detailed error message explaining exactly what went wrong",
-            exit_code=1,
-            execution_time_ms=100,
-            execution_platform="lambda"
-        )
-        
-        confidence = agent._estimate_mock_confidence(sample_bug, test_result)
-        
-        # Should be higher than base bug confidence
-        assert confidence >= sample_bug.confidence_score
-    
-    def test_estimate_confidence_critical_severity(self, agent, sample_test_result):
-        """Test confidence boost for critical bugs."""
-        bug = BugReport(
-            bug_id="bug-1",
-            file_path="test.py",
-            line_number=10,
-            severity="critical",
-            description="Critical bug",
-            code_snippet="code",
-            confidence_score=0.5
-        )
-        
-        confidence = agent._estimate_mock_confidence(bug, sample_test_result)
-        
-        # Should be higher than base confidence
-        assert confidence > 0.5
+        mock_stream = Mock()
+        mock_stream.read.return_value = mock_response_body
+        agent.bedrock_client.invoke_model.return_value = {"body": mock_stream}
+
+        root_cause = await agent._analyze_failure(sample_test_result, sample_bug, "wf-123")
+
+        assert isinstance(root_cause, RootCause)
+        assert root_cause.bug_id == sample_bug.bug_id
+        assert "Null pointer" in root_cause.cause_description
+        assert 0.0 <= root_cause.confidence_score <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_analyze_failure_fallback_on_error(self, agent, sample_bug, sample_test_result):
+        """Test that _analyze_failure returns low-confidence result on Bedrock error."""
+        agent.bedrock_client.invoke_model.side_effect = Exception("Bedrock unavailable")
+
+        root_cause = await agent._analyze_failure(sample_test_result, sample_bug, "wf-123")
+
+        assert isinstance(root_cause, RootCause)
+        assert root_cause.bug_id == sample_bug.bug_id
+        assert root_cause.confidence_score <= 0.2
 
 
 class TestKeyTermExtraction:
