@@ -34,6 +34,9 @@ from cloudforge.utils.export import (
 )
 
 
+from cloudforge.api import chatbot_routes
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include chatbot routes (deferred to avoid blocking on import)
+# app.include_router(chatbot_routes.router)
 
 # Global state (will be initialized on startup)
 state_store: Optional[StateStore] = None
