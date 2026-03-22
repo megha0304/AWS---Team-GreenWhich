@@ -1,0 +1,960 @@
+{% extends "base.html" %}
+
+{% block title %}CloudForge Chatbot - Bug Analysis Assistant{% endblock %}
+
+{% block content %}
+<div class="chatbot-container">
+    <div class="chatbot-header">
+        <h1>🤖 CloudForge Bug Intelligence Assistant</h1>
+        <p>AI-powered chatbot for bug analysis, fix suggestions, and workflow management</p>
+    </div>
+
+    <div class="chatbot-main">
+        <!-- Chat Panel -->
+        <div class="chat-panel">
+            <div class="chat-messages" id="chatMessages">
+                <!-- Messages will be added here by JavaScript -->
+            </div>
+
+            <div class="chat-input-area">
+                <div class="input-controls">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        class="message-input" 
+                        placeholder="Type your message or use voice..."
+                        autocomplete="off"
+                    >
+                    <button id="sendBtn" class="btn btn-primary" title="Send message">
+                        <span>Send</span>
+                    </button>
+                    <button id="voiceBtn" class="btn btn-voice" title="Start voice input">
+                        🎤
+                    </button>
+                </div>
+                <div class="voice-status" id="voiceStatus" style="display: none;">
+                    <span class="listening-indicator">🔴 Listening...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="chatbot-sidebar">
+            <!-- Workflow Context -->
+            <div class="sidebar-section">
+                <h3>📊 Workflow Context</h3>
+                <div class="context-info">
+                    <div class="info-item">
+                        <label>Workflow ID:</label>
+                        <input type="text" id="workflowId" class="context-input" placeholder="Enter workflow ID">
+                    </div>
+                    <div class="info-item">
+                        <label>Status:</label>
+                        <span id="workflowStatus" class="status-badge">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Bugs Found:</label>
+                        <span id="bugsCount">0</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Fixes Suggested:</label>
+                        <span id="fixesCount">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Commands -->
+            <div class="sidebar-section">
+                <h3>⚡ Quick Commands</h3>
+                <div class="quick-commands">
+                    <button class="quick-cmd" onclick="sendCommand('analyze')">
+                        🔍 Analyze
+                    </button>
+                    <button class="quick-cmd" onclick="sendCommand('suggest')">
+                        💡 Suggest
+                    </button>
+                    <button class="quick-cmd" onclick="sendCommand('status')">
+                        📈 Status
+                    </button>
+                    <button class="quick-cmd" onclick="sendCommand('list')">
+                        📋 List
+                    </button>
+                    <button class="quick-cmd" onclick="sendCommand('export')">
+                        📤 Export
+                    </button>
+                    <button class="quick-cmd" onclick="sendCommand('help')">
+                        ❓ Help
+                    </button>
+                </div>
+            </div>
+
+            <!-- Voice Settings -->
+            <div class="sidebar-section">
+                <h3>🎤 Voice Settings</h3>
+                <div class="voice-settings">
+                    <div class="setting-item">
+                        <label for="voiceLanguage">Language:</label>
+                        <select id="voiceLanguage" onchange="changeVoiceLanguage()">
+                            <option value="en-US">English (US)</option>
+                            <option value="es-ES">Spanish</option>
+                            <option value="fr-FR">French</option>
+                            <option value="de-DE">German</option>
+                            <option value="zh-CN">Chinese</option>
+                            <option value="ja-JP">Japanese</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="autoSpeak">
+                            Auto-speak responses
+                        </label>
+                    </div>
+                    <button class="btn btn-secondary" onclick="stopSpeech()" style="width: 100%; margin-top: 10px;">
+                        🔇 Stop Speaking
+                    </button>
+                </div>
+            </div>
+
+            <!-- Session Info -->
+            <div class="sidebar-section">
+                <h3>💬 Session</h3>
+                <div class="session-info">
+                    <div class="info-item">
+                        <label>Session ID:</label>
+                        <span id="sessionId" class="session-id">-</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="newSession()">
+                        New Session
+                    </button>
+                    <button class="btn btn-secondary" onclick="stopPolling(); addMessageToChat('Processing stopped.', 'assistant');">
+                        ⏹️ Stop Processing
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearHistory()">
+                        Clear History
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.chatbot-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.chatbot-header {
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    padding: 20px;
+    text-align: center;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.chatbot-header h1 {
+    margin: 0;
+    font-size: 28px;
+}
+
+.chatbot-header p {
+    margin: 5px 0 0 0;
+    opacity: 0.9;
+}
+
+.chatbot-main {
+    display: flex;
+    flex: 1;
+    gap: 20px;
+    padding: 20px;
+    overflow: hidden;
+}
+
+.chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.message {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.user-message {
+    align-items: flex-end;
+}
+
+.user-message .message-content {
+    background: #667eea;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 12px;
+    max-width: 70%;
+    word-wrap: break-word;
+}
+
+.assistant-message {
+    align-items: flex-start;
+}
+
+.assistant-message .message-content {
+    background: #f0f0f0;
+    color: #333;
+    padding: 12px 16px;
+    border-radius: 12px;
+    max-width: 70%;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    line-height: 1.6;
+}
+
+.assistant-message .message-content a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    border-bottom: 2px solid #667eea;
+}
+
+.assistant-message .message-content a:hover {
+    color: #5568d3;
+    border-bottom-color: #5568d3;
+}
+
+.assistant-message .message-content ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.assistant-message .message-content li {
+    margin: 5px 0;
+}
+
+.message-time {
+    font-size: 12px;
+    color: #999;
+    padding: 0 16px;
+}
+
+.chat-input-area {
+    border-top: 1px solid #eee;
+    padding: 15px;
+    background: #fafafa;
+}
+
+.input-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.message-input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.message-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: #667eea;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5568d3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-voice {
+    background: #ff6b6b;
+    color: white;
+    font-size: 18px;
+    padding: 10px 14px;
+}
+
+.btn-voice:hover {
+    background: #ff5252;
+}
+
+.btn-voice.active {
+    background: #ff3838;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+    50% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+}
+
+.voice-status {
+    margin-top: 10px;
+    text-align: center;
+    color: #ff6b6b;
+    font-weight: 500;
+}
+
+.listening-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chatbot-sidebar {
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+}
+
+.sidebar-section {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.context-info,
+.session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.info-item label {
+    color: #666;
+    font-weight: 500;
+}
+
+.context-input {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.quick-commands {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.quick-cmd {
+    padding: 10px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.quick-cmd:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.voice-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.setting-item label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+}
+
+.setting-item select,
+.setting-item input[type="checkbox"] {
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.session-id {
+    font-family: monospace;
+    font-size: 11px;
+    color: #999;
+    word-break: break-all;
+}
+
+.btn-secondary {
+    background: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+    width: 100%;
+    margin-top: 5px;
+}
+
+.btn-secondary:hover {
+    background: #e8e8e8;
+}
+
+.quick-btn {
+    display: inline-block;
+    margin: 5px 5px 5px 0;
+    padding: 8px 12px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.quick-btn:hover {
+    background: #5568d3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.quick-btn:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 1024px) {
+    .chatbot-main {
+        flex-direction: column;
+    }
+    
+    .chatbot-sidebar {
+        width: 100%;
+        max-height: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .chatbot-header h1 {
+        font-size: 20px;
+    }
+    
+    .user-message .message-content,
+    .assistant-message .message-content {
+        max-width: 90%;
+    }
+    
+    .quick-commands {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+// Global state
+let sessionId = null;
+let workflowId = null;
+let isListening = false;
+let recognition = null;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', async () => {
+    initializeSession();
+    setupEventListeners();
+    setupVoiceRecognition();
+});
+
+async function initializeSession() {
+    try {
+        // Clear any existing messages first
+        const messagesDiv = document.getElementById('chatMessages');
+        messagesDiv.innerHTML = '';
+        
+        const response = await fetch('/chatbot/sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': localStorage.getItem('api_key') || 'demo-key'
+            },
+            body: JSON.stringify({})
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (!data.session_id) {
+            throw new Error('No session_id in response');
+        }
+        
+        sessionId = data.session_id;
+        document.getElementById('sessionId').textContent = sessionId.substring(0, 8) + '...';
+        console.log('Session created:', sessionId);
+        
+        // Add initial greeting FIRST (before any other messages)
+        addMessageToChat('👋 Hello! I\'m CloudForge\'s AI assistant. How can I help you today?', 'assistant');
+    } catch (error) {
+        console.error('Error initializing session:', error);
+        addMessageToChat('Error: Could not initialize chat session. ' + error.message, 'assistant');
+    }
+}
+
+function setupEventListeners() {
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const voiceBtn = document.getElementById('voiceBtn');
+    const workflowInput = document.getElementById('workflowId');
+    
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+    
+    voiceBtn.addEventListener('click', toggleVoiceInput);
+    workflowInput.addEventListener('change', (e) => {
+        workflowId = e.target.value;
+    });
+}
+
+function setupVoiceRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        console.warn('Speech Recognition not supported');
+        document.getElementById('voiceBtn').disabled = true;
+        document.getElementById('voiceBtn').title = 'Speech Recognition not supported in this browser';
+        return;
+    }
+    
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = document.getElementById('voiceLanguage').value;
+    
+    recognition.onstart = () => {
+        console.log('🎤 Voice recognition started');
+        isListening = true;
+        document.getElementById('voiceBtn').classList.add('active');
+        document.getElementById('voiceStatus').style.display = 'block';
+        document.getElementById('voiceStatus').innerHTML = '<span class="listening-indicator">🔴 Listening... Speak now!</span>';
+    };
+    
+    recognition.onresult = (event) => {
+        console.log('Speech result event:', event);
+        let transcript = '';
+        let isFinal = false;
+        
+        // Collect all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcriptPart = event.results[i][0].transcript;
+            transcript += transcriptPart;
+            console.log(`Result ${i}: "${transcriptPart}" (confidence: ${event.results[i][0].confidence}, isFinal: ${event.results[i].isFinal})`);
+            
+            if (event.results[i].isFinal) {
+                isFinal = true;
+            }
+        }
+        
+        console.log(`Transcript: "${transcript}", isFinal: ${isFinal}`);
+        
+        // Update input field with interim results
+        document.getElementById('messageInput').value = transcript;
+        
+        // Only send when we have a final result
+        if (isFinal && transcript.trim()) {
+            console.log('Final transcript received, sending message:', transcript);
+            setTimeout(() => {
+                sendMessage();
+            }, 100);
+        }
+    };
+    
+    recognition.onend = () => {
+        console.log('🎤 Voice recognition ended');
+        isListening = false;
+        document.getElementById('voiceBtn').classList.remove('active');
+        document.getElementById('voiceStatus').style.display = 'none';
+    };
+    
+    recognition.onerror = (event) => {
+        console.error('🎤 Speech recognition error:', event.error);
+        const errorMessages = {
+            'no-speech': 'No speech detected. Please try again.',
+            'audio-capture': 'No microphone found. Please check your device.',
+            'network': 'Network error. Please check your connection.',
+            'permission-denied': 'Microphone permission denied. Please allow access in browser settings.',
+            'not-allowed': 'Microphone access not allowed. Please enable it in browser settings.',
+            'service-not-allowed': 'Speech recognition service not allowed.',
+            'bad-grammar': 'Grammar error in speech recognition.',
+            'aborted': 'Speech recognition was aborted.'
+        };
+        
+        const errorMsg = errorMessages[event.error] || `Error: ${event.error}`;
+        console.error('Error details:', errorMsg);
+        
+        document.getElementById('voiceStatus').style.display = 'block';
+        document.getElementById('voiceStatus').innerHTML = `<span style="color: #ff6b6b;">❌ ${errorMsg}</span>`;
+        
+        // Auto-hide error after 5 seconds
+        setTimeout(() => {
+            if (!isListening) {
+                document.getElementById('voiceStatus').style.display = 'none';
+            }
+        }, 5000);
+    };
+}
+
+function toggleVoiceInput() {
+    if (!recognition) {
+        console.error('Speech recognition not initialized');
+        alert('Speech recognition is not available in your browser. Please use Chrome, Edge, or Safari.');
+        return;
+    }
+    
+    if (isListening) {
+        console.log('Stopping voice input');
+        recognition.stop();
+    } else {
+        console.log('Starting voice input');
+        try {
+            recognition.start();
+        } catch (error) {
+            console.error('Error starting recognition:', error);
+            alert('Error starting voice recognition: ' + error.message);
+        }
+    }
+}
+
+async function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    if (!sessionId) {
+        addMessageToChat('Error: Session not initialized. Please refresh the page.', 'assistant');
+        return;
+    }
+    
+    // Add user message to chat
+    addMessageToChat(message, 'user');
+    input.value = '';
+    
+    // Check if this is a workflow request
+    const isWorkflowRequest = /(?:analyze|scan|detect|run|execute|start)\s+(https?:\/\/|[C-Za-z]:|\.\/|\.\.\/|\/)/i.test(message);
+    
+    try {
+        const response = await fetch(`/chatbot/sessions/${sessionId}/messages`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': localStorage.getItem('api_key') || 'demo-key'
+            },
+            body: JSON.stringify({
+                message: message,
+                workflow_state: workflowId ? { workflow_id: workflowId } : null
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // For workflow requests, show the response immediately
+        if (isWorkflowRequest && data.content) {
+            addMessageToChat(data.content, 'assistant');
+            // Start polling for workflow results
+            startPollingForResults();
+        } else {
+            // For non-workflow requests, just start polling
+            // The response will appear when polling fetches it
+            startPollingForResults();
+        }
+        
+    } catch (error) {
+        console.error('Error sending message:', error);
+        addMessageToChat('Sorry, I encountered an error. Please try again. Error: ' + error.message, 'assistant');
+    }
+}
+
+// Poll for new messages every 3 seconds
+let pollingInterval = null;
+let lastMessageCount = 0;
+
+async function startPollingForResults() {
+    console.log('Starting to poll for results...');
+    
+    // Stop any existing polling
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+    
+    pollingInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/chatbot/sessions/${sessionId}/history`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': localStorage.getItem('api_key') || 'demo-key'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const messages = await response.json();
+            
+            // If we have new messages, add them to the chat
+            if (messages.length > lastMessageCount) {
+                console.log(`Found ${messages.length - lastMessageCount} new messages`);
+                
+                // Add new messages
+                for (let i = lastMessageCount; i < messages.length; i++) {
+                    const msg = messages[i];
+                    addMessageToChat(msg.content, msg.sender);
+                }
+                
+                lastMessageCount = messages.length;
+                
+                // If we see a final summary message, stop polling
+                if (messages[messages.length - 1].content.includes('Workflow Completed Successfully')) {
+                    console.log('Workflow completed, stopping polling');
+                    stopPolling();
+                }
+            }
+        } catch (error) {
+            console.error('Error polling for results:', error);
+            // Don't stop polling on error, just log it
+        }
+    }, 3000); // Poll every 3 seconds
+}
+
+function stopPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('Polling stopped');
+    }
+}
+
+function sendCommand(command) {
+    const message = `${command}`;
+    addMessageToChat(message, 'user');
+    
+    // Show loading
+    const messagesDiv = document.getElementById('chatMessages');
+    const loadingEl = document.createElement('div');
+    loadingEl.className = 'message assistant-message';
+    loadingEl.innerHTML = '<div class="message-content"><span style="opacity: 0.6;">⏳ Processing...</span></div>';
+    messagesDiv.appendChild(loadingEl);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    // Send as a regular message, not a command
+    fetch(`/chatbot/sessions/${sessionId}/messages`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': localStorage.getItem('api_key') || 'demo-key'
+        },
+        body: JSON.stringify({
+            message: message,
+            workflow_state: workflowId ? { workflow_id: workflowId } : null
+        })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.json();
+    })
+    .then(data => {
+        loadingEl.remove();
+        addMessageToChat(data.content, 'assistant');
+        if (document.getElementById('autoSpeak').checked) {
+            speakText(data.content);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        loadingEl.remove();
+        addMessageToChat('Error: ' + error.message, 'assistant');
+    });
+}
+
+function addMessageToChat(content, sender) {
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageEl = document.createElement('div');
+    messageEl.className = `message ${sender}-message`;
+    
+    const contentEl = document.createElement('div');
+    contentEl.className = 'message-content';
+    
+    // Convert markdown links to HTML links
+    let htmlContent = content
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+        .replace(/\n/g, '<br>');
+    
+    // Convert button syntax [BUTTON:action:label] to actual buttons
+    htmlContent = htmlContent.replace(/\[BUTTON:([^:]+):([^\]]+)\]/g, (match, action, label) => {
+        return `<button class="quick-btn" onclick="handleQuickAction('${action}')">${label}</button>`;
+    });
+    
+    contentEl.innerHTML = htmlContent;
+    
+    const timeEl = document.createElement('span');
+    timeEl.className = 'message-time';
+    timeEl.textContent = new Date().toLocaleTimeString();
+    
+    messageEl.appendChild(contentEl);
+    messageEl.appendChild(timeEl);
+    messagesDiv.appendChild(messageEl);
+    
+    // Scroll to bottom
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function speakText(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = document.getElementById('voiceLanguage').value;
+    window.speechSynthesis.speak(utterance);
+}
+
+function stopSpeech() {
+    window.speechSynthesis.cancel();
+    console.log('Speech stopped');
+}
+
+function handleQuickAction(action) {
+    const actions = {
+        'critical': 'show critical bugs',
+        'high': 'show high priority bugs',
+        'export': 'export results',
+        'analyze': 'analyze another repository'
+    };
+    
+    const message = actions[action];
+    if (message) {
+        document.getElementById('messageInput').value = message;
+        sendMessage();
+    }
+}
+
+function changeVoiceLanguage() {
+    const lang = document.getElementById('voiceLanguage').value;
+    if (recognition) {
+        recognition.lang = lang;
+    }
+}
+
+async function newSession() {
+    if (confirm('Create a new chat session?')) {
+        // Stop polling if it's running
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+            console.log('Polling stopped');
+        }
+        
+        // Reset message counter
+        lastMessageCount = 0;
+        
+        // Initialize new session
+        await initializeSession();
+        document.getElementById('chatMessages').innerHTML = '';
+        addMessageToChat('New session started! How can I help you?', 'assistant');
+    }
+}
+
+function clearHistory() {
+    if (confirm('Clear chat history?')) {
+        // Stop polling if it's running
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+            console.log('Polling stopped');
+        }
+        
+        // Reset message counter
+        lastMessageCount = 0;
+        
+        // Clear chat messages
+        document.getElementById('chatMessages').innerHTML = '';
+        addMessageToChat('Chat history cleared. How can I help you?', 'assistant');
+    }
+}
+</script>
+{% endblock %}
